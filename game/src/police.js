@@ -13,10 +13,19 @@ export function createPolice(G) {
   let quietTimer = 0, decayTimer = 0;
 
   function spawnCar() {
-    const a = G.rng() * Math.PI * 2;
-    const x = Math.max(-270, Math.min(270, G.player.x + Math.cos(a) * 90));
-    const z = Math.max(-270, Math.min(270, G.player.z + Math.sin(a) * 90));
-    const car = makeCar(G.rng, x, z, 0, true);
+    // Spawn on a road near the player, facing them — never inside a building.
+    const alongZ = G.rng() < 0.5;
+    const lines = G.world.roadLines;
+    const axisPos = alongZ ? G.player.x : G.player.z;
+    const near = lines.filter((v) => Math.abs(axisPos - v) < 140);
+    const line = near.length ? near[Math.floor(G.rng() * near.length)] : lines[4];
+    const dist = 80 + G.rng() * 30;
+    const dir = G.rng() < 0.5 ? 1 : -1;
+    const lane = G.rng() < 0.5 ? -3.5 : 3.5;
+    const x = alongZ ? line + lane : Math.max(-275, Math.min(275, G.player.x + dir * dist));
+    const z = alongZ ? Math.max(-275, Math.min(275, G.player.z + dir * dist)) : line + lane;
+    const heading = alongZ ? (G.player.z > z ? 0 : Math.PI) : (G.player.x > x ? Math.PI / 2 : -Math.PI / 2);
+    const car = makeCar(G.rng, x, z, heading, true);
     car.parked = false;
     car.police = true;
     G.scene.add(car.mesh);
@@ -76,6 +85,13 @@ export function createPolice(G) {
     // Chase: steer toward the player, ram on contact.
     for (const u of units) {
       if (!u.alive) continue;
+      // Keep police cars from piling onto each other.
+      for (const o of units) {
+        if (o === u || !o.alive) continue;
+        const dx = u.x - o.x, dz = u.z - o.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 4.5 && d > 0.01) { u.x += (dx / d) * 1.2; u.z += (dz / d) * 1.2; }
+      }
       const dx = G.player.x - u.x, dz = G.player.z - u.z;
       const dist = Math.hypot(dx, dz);
       const wantHeading = Math.atan2(dx, dz);
@@ -98,13 +114,16 @@ export function createPolice(G) {
         u.mesh.userData.lightRed.material.emissive.setHex(on ? 0xff0000 : 0x220000);
         u.mesh.userData.lightBlue.material.emissive.setHex(on ? 0x000022 : 0x0022ff);
       }
-      // Ram the player.
-      if (dist < 3.2) {
+      // Ram the player: push off them rather than grinding through them.
+      if (dist < 3.6) {
+        const push = (3.6 - dist) * 0.6;
+        u.x -= (dx / (dist || 1)) * push;
+        u.z -= (dz / (dist || 1)) * push;
+        u.speed = Math.min(u.speed, G.player.inCar ? G.player.inCar.speed : 8);
         if (G.player.inCar) {
-          G.player.inCar.speed *= 0.6;
-          G.damagePlayer(4 * dt * 10, 'police');
+          G.damagePlayer(1.2 * dt * 10, 'police');
         } else {
-          G.damagePlayer(10 * dt * 4, 'police');
+          G.damagePlayer(0.8 * dt * 10, 'police');
         }
       }
     }

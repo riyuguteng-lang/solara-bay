@@ -86,6 +86,9 @@ G.hud = createHud(G);
 G.minimap = createMinimap(document.getElementById('minimap'), G);
 G.missions = createMissions(G);
 
+// Debug hook for play-testing (read-only from the console): the live game state.
+window.__solara = G;
+
 function announce(msg) { status.textContent = msg; }
 
 G.setWanted = (n) => { G.wanted = Math.max(0, Math.min(5, n)); };
@@ -140,7 +143,7 @@ G.loadSave = (data) => {
   G.health = data.health ?? PLAYER.maxHealth;
   G.clockMinutes = data.clockMinutes ?? 540;
   G.wanted = 0; G.packagesFound = (data.packages || []).length;
-  G.player.x = data.player?.x ?? 0; G.player.z = data.player?.z ?? 12;
+  G.player.x = data.player?.x ?? -35; G.player.z = data.player?.z ?? -20;
   G.player.y = 0; G.player.inCar = null; G.player.mesh.visible = true;
   G.missions.applySave(data);
 };
@@ -148,7 +151,7 @@ G.loadSave = (data) => {
 G.newGame = () => {
   G.cash = START_CASH; G.health = PLAYER.maxHealth; G.wanted = 0;
   G.clockMinutes = 540; G.packagesFound = 0; G.won = false;
-  G.player.x = 0; G.player.z = 12; G.player.y = 0; G.player.vy = 0;
+  G.player.x = -35; G.player.z = -20; G.player.y = 0; G.player.vy = 0;
   G.player.inCar = null; G.player.mesh.visible = true;
   G.player.camYaw = Math.PI; G.player.camPitch = 0.32;
   for (const e of G.enemies) { e.alive = false; G.scene.remove(e.mesh); }
@@ -265,7 +268,8 @@ function step(dt) {
     driveCar(G, car, throttle, steer, dt);
     p.x = car.x; p.z = car.z;
     G.audio.setEngine(Math.abs(car.speed) / CITY.maxSpeed, true);
-    // Bump into other cars.
+    // Bump into other cars (one speed cut per collision episode).
+    if (car.bumpCooldown > 0) car.bumpCooldown -= dt;
     for (const other of G.cars) {
       if (other === car || !other.alive) continue;
       const dx = car.x - other.x, dz = car.z - other.z;
@@ -273,7 +277,9 @@ function step(dt) {
       if (d < 3.6 && d > 0.01) {
         car.x += (dx / d) * (3.6 - d) * 0.5;
         car.z += (dz / d) * (3.6 - d) * 0.5;
-        if (Math.abs(car.speed) > 8) { car.speed *= 0.55; G.audio.crash(); }
+        if (Math.abs(car.speed) > 8 && car.bumpCooldown <= 0) {
+          car.speed *= 0.55; G.audio.crash(); car.bumpCooldown = 0.8;
+        }
       }
     }
     // Run over a pedestrian: they go down, and the law notices.
@@ -324,7 +330,8 @@ let shotElapsed = 0, shotReady = false;
 
 function frame(now) {
   requestAnimationFrame(frame);
-  accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+  const dtFrame = Math.min((now - last) / 1000, MAX_FRAME);
+  accumulator += dtFrame;
   last = now;
   // Enter starts from the title screen (the button does the same).
   if (G.screen === 'title' && G.input.pressed.confirm) startPlay(false);
@@ -337,12 +344,22 @@ function frame(now) {
   if (G.screen === 'paused') accumulator = 0;
 
   // Camera.
-  if (G.screen === 'title' || (shot === 'start' && G.screen === 'title')) {
+  if (G.shotCam && G.shotCam.mode === 'chase-front' && G.player.inCar) {
+    // Cinematic chase view: ahead of the car, looking back at it with the
+    // police behind it in the background.
+    const car = G.player.inCar;
+    const tx = car.x, ty = 6, tz = car.z - 20;
+    const k = 1 - Math.pow(0.0001, dtFrame);
+    camera.position.x += (tx - camera.position.x) * k;
+    camera.position.y += (ty - camera.position.y) * k;
+    camera.position.z += (tz - camera.position.z) * k;
+    camera.lookAt(car.x, 1.5, car.z + 12);
+  } else if (G.screen === 'title' || (shot === 'start' && G.screen === 'title')) {
     const a = G.time * 0.05 + (G.shotCam ? G.shotCam.angle : 0);
     camera.position.set(Math.cos(a) * 240, 95, Math.sin(a) * 240);
     camera.lookAt(60, 12, 0);
   } else {
-    updateCamera(G, Math.min(0.05, (now - last) / 1000 + 0.016));
+    updateCamera(G, dtFrame);
   }
 
   renderer.render(scene, camera);
@@ -351,7 +368,7 @@ function frame(now) {
     G.minimap.draw();
   }
   if (shot && !shotReady) {
-    shotElapsed += 1 / 60;
+    shotElapsed += dtFrame;
     if (shotElapsed > 2.0) { shotReady = true; window.__shotReady = true; }
   }
 }

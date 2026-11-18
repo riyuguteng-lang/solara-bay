@@ -9,6 +9,9 @@ import { pick, range, rangeInt } from './random.js';
 
 const ROAD_LINES = [];
 for (let v = -CITY.half; v <= CITY.half; v += CITY.block) ROAD_LINES.push(v);
+// Block centres sit between the roads: a block spans road+7 to road+63.
+const BLOCK_CENTERS = [];
+for (let v = -CITY.half + CITY.block / 2; v <= CITY.half; v += CITY.block) BLOCK_CENTERS.push(v);
 
 function makeWindowTexture() {
   const c = document.createElement('canvas'); c.width = 128; c.height = 256;
@@ -56,10 +59,10 @@ function makeGroundTexture() {
       g.fillRect(toPx(t), toPx(v - 0.7), px(12), px(1.4));
     }
   }
-  // Palm Court Plaza: a green square in the middle.
-  g.fillStyle = '#5da24a'; g.fillRect(toPx(-32), toPx(-32), px(64), px(64));
+  // Palm Court Plaza: a green square in the (-35,-35) block.
+  g.fillStyle = '#5da24a'; g.fillRect(toPx(-67), toPx(-67), px(64), px(64));
   g.fillStyle = '#7fb8d8';
-  g.beginPath(); g.arc(toPx(0), toPx(0), px(9), 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(toPx(-35), toPx(-35), px(9), 0, Math.PI * 2); g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -96,16 +99,18 @@ export function createWorld(rng) {
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   boxGeo.translate(0, 0.5, 0);
   const placements = [];
-  for (const bx of ROAD_LINES) {
-    for (const bz of ROAD_LINES) {
-      if (bx === 0 && bz === 0) continue; // Palm Court Plaza stays open
+  for (const bx of BLOCK_CENTERS) {
+    for (const bz of BLOCK_CENTERS) {
+      if (bx === -35 && bz === -35) continue; // Palm Court Plaza stays open
       const count = rangeInt(rng, 1, 3);
       for (let i = 0; i < count; i++) {
         const w = range(rng, 16, 30), d = range(rng, 16, 30);
-        const x = bx + range(rng, -14, 14) - Math.sign(bx || 1) * 0;
-        const z = bz + range(rng, -14, 14);
-        const cx = Math.max(bx - 24, Math.min(bx + 24, x));
-        const cz = Math.max(bz - 24, Math.min(bz + 24, z));
+        // Keep the whole footprint inside the block (roads start 28 m from
+        // the block centre), so no building ever intrudes into a road.
+        const maxOffX = Math.max(0, 27 - w / 2);
+        const maxOffZ = Math.max(0, 27 - d / 2);
+        const cx = bx + range(rng, -maxOffX, maxOffX);
+        const cz = bz + range(rng, -maxOffZ, maxOffZ);
         // Keep every named place reachable: no building within 18 m of one.
         let nearPlace = false;
         for (const key in PLACES) {
@@ -149,7 +154,7 @@ export function createWorld(rng) {
   // Palm trees along the beach and the plaza.
   const palmSpots = [];
   for (let z = -260; z <= 260; z += 28) palmSpots.push({ x: CITY.beachX - 14, z: z + range(rng, -6, 6) });
-  for (let i = 0; i < 10; i++) palmSpots.push({ x: range(rng, -24, 24), z: range(rng, -24, 24) });
+  for (let i = 0; i < 10; i++) palmSpots.push({ x: -35 + range(rng, -24, 24), z: -35 + range(rng, -24, 24) });
   const trunkGeo = new THREE.CylinderGeometry(0.25, 0.4, 7, 6);
   trunkGeo.translate(0, 3.5, 0);
   const trunkMesh = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x8a6a42 }), palmSpots.length);
@@ -188,7 +193,7 @@ export function createWorld(rng) {
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
     const bench = new THREE.Mesh(new THREE.BoxGeometry(3, 0.5, 1), benchMat);
-    bench.position.set(Math.cos(a) * 16, 0.5, Math.sin(a) * 16);
+    bench.position.set(-35 + Math.cos(a) * 16, 0.5, -35 + Math.sin(a) * 16);
     bench.rotation.y = -a + Math.PI / 2;
     group.add(bench);
   }

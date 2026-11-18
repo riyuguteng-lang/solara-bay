@@ -49,7 +49,7 @@ export const SAVE_KEY = 'solara-bay.save.v1';
 
 // Named places in Solara Bay (all original).
 export const PLACES = {
-  plaza:    { x: 0,    z: 0,    name: 'Palm Court Plaza' },
+  plaza:    { x: -35,  z: -35,  name: 'Palm Court Plaza' },
   marina:   { x: 315,  z: -70,  name: 'Solara Marina' },
   docks:    { x: -35,  z: 245,  name: 'South Docks' },
   cafe:     { x: 105,  z: 35,   name: 'Cafe Lumen' },

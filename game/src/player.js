@@ -98,7 +98,7 @@ export function updateCamera(G, dt) {
     const fixed = G.world.collideCircle(tx, tz, 1);
     tx = fixed.x; tz = fixed.z;
   } else {
-    const dist = 6.5;
+    const dist = 5.2;
     tx = p.x + Math.sin(p.camYaw) * Math.cos(p.camPitch) * dist;
     tz = p.z + Math.cos(p.camYaw) * Math.cos(p.camPitch) * dist;
     ty = p.y + 1.6 + Math.sin(p.camPitch) * dist;
