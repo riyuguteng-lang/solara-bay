@@ -1,53 +1,85 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Solara Bay — keyboard and mouse. WASD move, mouse looks (pointer lock),
+// Shift run, Space jump, E enter/exit car, F punch, 1/2 fists/pistol,
+// R reload, P or Esc pause, M mute, Enter confirm on menus.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export const ACTION_CONFIRM = 'confirm';
+export const ACTION_PAUSE = 'pause';
+export const ACTION_INTERACT = 'interact';
+export const ACTION_PUNCH = 'punch';
+export const ACTION_JUMP = 'jump';
+export const ACTION_RUN = 'run';
+export const ACTION_RELOAD = 'reload';
+export const ACTION_MUTE = 'mute';
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const KEYMAP = {
+  KeyW: 'forward', ArrowUp: 'forward',
+  KeyS: 'back', ArrowDown: 'back',
+  KeyA: 'left', ArrowLeft: 'left',
+  KeyD: 'right', ArrowRight: 'right',
+  ShiftLeft: 'run', ShiftRight: 'run',
+  Space: 'jump',
+  KeyE: 'interact',
+  KeyF: 'punch',
+  Digit1: 'fists', Digit2: 'pistol',
+  KeyR: 'reload',
+  KeyM: 'mute',
+  KeyP: 'pause', Escape: 'pause',
+  Enter: 'confirm',
+};
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+export function createInput(canvas) {
+  const keys = {};
+  const pressed = {};   // true only on the frame the key went down
+  const mouse = { dx: 0, dy: 0, down: false, clicked: false };
+  let locked = false;
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  function onKeyDown(e) {
+    if (e.repeat) return;
+    const action = KEYMAP[e.code];
+    if (!action) return;
+    keys[action] = true;
+    pressed[action] = true;
+    if (action === 'jump' || action === 'pause') e.preventDefault();
+  }
+  function onKeyUp(e) {
+    const action = KEYMAP[e.code];
+    if (action) keys[action] = false;
+  }
+  function onMouseMove(e) {
+    if (!locked) return;
+    mouse.dx += e.movementX;
+    mouse.dy += e.movementY;
+  }
+  function onMouseDown(e) {
+    if (e.button === 0) { mouse.down = true; mouse.clicked = true; }
+  }
+  function onMouseUp(e) { if (e.button === 0) mouse.down = false; }
+  function onLockChange() { locked = document.pointerLockElement === canvas; }
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('pointerlockchange', onLockChange);
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    keys, pressed, mouse,
+    get locked() { return locked; },
+    lock() { if (!locked) canvas.requestPointerLock?.(); },
+    unlock() { if (locked) document.exitPointerLock?.(); },
+    /** Call once per frame: edge-triggered presses and mouse deltas clear. */
+    endFrame() {
+      for (const k in pressed) pressed[k] = false;
+      mouse.dx = 0; mouse.dy = 0; mouse.clicked = false;
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    destroy() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('pointerlockchange', onLockChange);
     },
   };
 }
