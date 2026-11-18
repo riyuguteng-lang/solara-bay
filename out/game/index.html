@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solara Bay — an open-world crime game</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1c2c; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hidden { display: none !important; }
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); z-index: 5; }
+  #top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23c; }
+  #stars.hot { color: #ff5252; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  #cash { font-size: 24px; font-weight: 800; color: #7dff9b; }
+  #clock { font-size: 16px; opacity: .9; }
+  #health-bar { width: 190px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 6px; margin-top: 6px; margin-left: auto; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #4caf50; }
+  #health-text { font-size: 12px; }
+  #objective-box { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; max-width: 560px; }
+  #objective { font-size: 18px; font-weight: 700; background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 8px; }
+  #distance { font-size: 14px; color: #ffd23c; margin-top: 4px; }
+  #minimap-wrap { position: absolute; left: 16px; bottom: 16px; }
+  #minimap { width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.65); border-radius: 8px; background: #223; display: block; }
+  #packages { font-size: 13px; margin-top: 4px; }
+  #bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right; }
+  #speed { font-size: 30px; font-weight: 800; }
+  #weapon { font-size: 15px; font-weight: 700; }
+  #ammo { font-size: 14px; color: #ffd23c; }
+  #help { position: absolute; left: 220px; bottom: 16px; font-size: 12.5px; line-height: 1.55; background: rgba(0,0,0,.5); padding: 8px 12px; border-radius: 8px; max-width: 300px; }
+  #subtitle { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); max-width: 640px; text-align: center; font-size: 17px; font-style: italic; background: rgba(0,0,0,.6); padding: 8px 16px; border-radius: 8px; }
+  #banner { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); font-size: 24px; font-weight: 800; color: #ffd23c; background: rgba(0,0,0,.6); padding: 10px 22px; border-radius: 10px; white-space: nowrap; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.45)); pointer-events: none; z-index: 6; }
+  /* Menus */
+  .menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 18, 32, .72); z-index: 10; color: #fff; }
+  .panel { max-width: 620px; width: 92%; background: linear-gradient(160deg, #123a5c, #0a2238); border: 2px solid #ffd23c; border-radius: 16px; padding: 28px 34px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .panel h1 { margin: 0 0 2px; font-size: 52px; letter-spacing: 2px; color: #ffd23c; }
+  .panel h2 { margin: 0 0 14px; font-size: 15px; font-weight: 400; color: #bfe3ff; letter-spacing: 1px; }
+  .panel p { font-size: 15px; line-height: 1.6; }
+  .panel .controls { font-size: 13.5px; line-height: 1.8; background: rgba(0,0,0,.35); padding: 10px 14px; border-radius: 8px; }
+  .panel button { pointer-events: auto; display: block; width: 100%; margin-top: 10px; padding: 13px; font-size: 17px; font-weight: 800; letter-spacing: 1px; color: #10202f; background: #ffd23c; border: none; border-radius: 10px; cursor: pointer; }
+  .panel button.secondary { background: #bfe3ff; }
+  .panel button:hover { filter: brightness(1.1); }
+  #menu-info, #over-text, #win-text { font-size: 14px; color: #cfe8ff; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Solara Bay: an open-world crime game. Steal cars, outrun the police and run five missions across a coastal city."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud" class="hidden">
+  <div id="top-right">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$150</div>
+    <div id="clock">09:00</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">100</div>
+  </div>
+  <div id="objective-box"><div id="objective">Welcome to Solara Bay</div><div id="distance"></div></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="190" height="190"></canvas><div id="packages">Packages 0/8</div></div>
+  <div id="bottom-right"><div id="speed"></div><div id="weapon">FISTS</div><div id="ammo"></div></div>
+  <div id="help">WASD move &nbsp;·&nbsp; Mouse look &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Space jump<br>E enter / exit car &nbsp;·&nbsp; F punch &nbsp;·&nbsp; 1 fists / 2 pistol<br>Click shoot &nbsp;·&nbsp; R reload &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</div>
+  <div id="subtitle" class="hidden"></div>
+  <div id="banner" class="hidden"></div>
+  <div id="crosshair" class="hidden"></div>
+</div>
+<div id="flash" class="hidden"></div>
+
+<div id="menu" class="menu">
+  <div class="panel">
+    <h1>SOLARA BAY</h1>
+    <h2>AN OPEN-WORLD CRIME GAME &nbsp;·&nbsp; A SUN-SOAKED COASTAL CITY</h2>
+    <p>You are <b>Jax Reyes</b>, new in Solara Bay with $150 and a borrowed
+    name. Mara, the fixer at Cafe Lumen, has five jobs for you — from stealing
+    your first car to the biggest score the city has ever seen. Steal cars,
+    outrun the Solara Bay PD, and mind the stars over your head: the more
+    heat you carry, the harder they come for you.</p>
+    <div class="controls">WASD move · Mouse look · Shift run · Space jump ·
+    E enter / exit car · F punch · 1 fists / 2 pistol · Click shoot ·
+    R reload · P pause · M mute · Enter start</div>
+    <p id="menu-info"></p>
+    <button id="start-btn">START A NEW LIFE</button>
+    <button id="continue-btn" class="secondary hidden">CONTINUE SAVED GAME</button>
+  </div>
+</div>
+
+<div id="pause-menu" class="menu hidden">
+  <div class="panel">
+    <h1>PAUSED</h1>
+    <p>Solara Bay waits for no one — except right now.</p>
+    <button id="resume-btn">RESUME</button>
+    <button id="save-btn" class="secondary">SAVE GAME</button>
+    <button id="restart-btn" class="secondary">RESTART STORY</button>
+    <button id="quit-btn" class="secondary">QUIT TO TITLE</button>
+  </div>
+</div>
+
+<div id="gameover-menu" class="menu hidden">
+  <div class="panel">
+    <h1>BUSTED FLAT</h1>
+    <p id="over-text"></p>
+    <button id="respawn-btn">WAKE UP AT ST. MARISOL HOSPITAL</button>
+  </div>
+</div>
+
+<div id="win-menu" class="menu hidden">
+  <div class="panel">
+    <h1>THE FINAL SCORE</h1>
+    <p id="win-text"></p>
+    <button id="again-btn">PLAY AGAIN</button>
+    <button id="free-btn" class="secondary">KEEP ROAMING SOLARA BAY</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
